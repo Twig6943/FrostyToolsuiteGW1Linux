@@ -150,6 +150,7 @@
     <Compile Include="FrostyLogger.cs" />
     <Compile Include="FrostyProfileTaskWindowLogger.cs" />
     <Compile Include="FrostyTaskLogger.cs" />
+    <Compile Include="FrostyTypeRefEditor.cs" />
     <Compile Include="Legacy\LegacyFileManagerV2.cs" />
     <Compile Include="Managers\NotificationManager.cs" />
     <Compile Include="Managers\UndoManager.cs" />

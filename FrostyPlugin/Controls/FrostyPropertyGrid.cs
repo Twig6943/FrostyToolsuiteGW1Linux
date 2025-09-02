@@ -1175,6 +1175,7 @@ namespace Frosty.Core.Controls
         private static readonly IReadOnlyDictionary<string, Type> StaticEditors = new Dictionary<string, Type>
         {
             //{ "String", typeof(FrostyStringEditor) },
+            { "TypeRef", typeof(FrostyTypeRefEditor) },
             { "CString", typeof(FrostyCStringEditor) },
             { "String", typeof(FrostyStringEditor) },
             { "Boolean", typeof(FrostyBooleanEditor) },

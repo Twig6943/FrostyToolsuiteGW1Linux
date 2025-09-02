@@ -52,7 +52,7 @@ namespace FrostySdk.IO
             m_flags = inFlags;
         }
 
-        public virtual void WriteAsset(EbxAsset asset)
+        public virtual void WriteAsset(EbxAsset asset, Stream stream = null)
         {
         }
 
@@ -87,7 +87,7 @@ namespace FrostySdk.IO
                     default: throw new InvalidDataException($"Unhandled field type: {value.Type}");
                 }
 
-                return writer.ToByteArray();;
+                return writer.ToByteArray();
             }
         }
 
@@ -153,7 +153,7 @@ namespace FrostySdk.IO
             m_flags = inFlags;
         }
 
-        public override void WriteAsset(EbxAsset asset)
+        public override void WriteAsset(EbxAsset asset, Stream stream = null)
         {
             if (m_flags.HasFlag(EbxWriteFlags.DoNotSort))
             {
@@ -1051,7 +1051,7 @@ namespace FrostySdk.IO
         {
         }
 
-        public override void WriteAsset(EbxAsset asset)
+        public override void WriteAsset(EbxAsset asset, Stream stream = null)
         {
             if (m_flags.HasFlag(EbxWriteFlags.DoNotSort))
             {
@@ -1246,21 +1246,26 @@ namespace FrostySdk.IO
                 WritePadding(16);
             }
 
-            
             boxedValueOffset = (uint)(Position - m_stringsLength - stringsOffset);
             if (m_boxedValueData.Count > 0)
             {
                 for (int i = 0; i < m_boxedValueData.Count; i++)
                 {
+                    WritePadding(16);
+
                     var boxedValue = m_boxedValues[i];
 
-                    Write(0);
-                    boxedValue.Offset = (uint)(Position - boxedValueOffset);
+                    boxedValue.Offset = (uint)(Position - boxedValueOffset - m_stringsLength - stringsOffset);
+
+                    long lastPos = Position;
+                    Position = boxedValueRefOffset + i * 8;
+                    Write(boxedValue.Offset);
+                    Position = lastPos;
+
                     Write(m_boxedValueData[i]);
 
                     m_boxedValues[i] = boxedValue;
                 }
-                WritePadding(16);
             }
             stringsAndDataLen = (uint)(Position - stringsOffset);
 
@@ -1284,7 +1289,7 @@ namespace FrostySdk.IO
                 Write(arrays[i].ClassRef);
             }
 
-            if (ProfilesLibrary.EbxVersion == 4)
+            if ((ProfilesLibrary.EbxVersion & 4) != 0)
             {
                 Position = 0x38;
                 Write(m_boxedValueData.Count);
@@ -1918,13 +1923,30 @@ namespace FrostySdk.IO
                         {
                             EbxBoxedValue boxedValue = new EbxBoxedValue() { Offset = 0, Type = (ushort)value.Type };
 
+                            switch (value.Type)
+                            {
+                                case EbxFieldType.Struct:
+                                case EbxFieldType.Enum:
+                                case EbxFieldType.Array:
+                                    {
+                                        EbxClass boxedClass = GetClass(value.Value.GetType());
+                                        int typeRef = AddClass(boxedClass.Name, boxedClass.FieldIndex, (byte)boxedClass.FieldCount, boxedClass.Alignment, boxedClass.Type, boxedClass.Size, boxedClass.SecondSize, value.Value.GetType());
+                                        boxedValue.ClassRef = (ushort)typeRef;
+                                        break;
+                                    }
+                            }
+
+                            using (NativeWriter boxedWriter = new NativeWriter(new MemoryStream()))
+                            {
+                                WriteField(value.Value, value.Type, classAlignment, boxedWriter, isReference);
+                                m_boxedValueData.Add(boxedWriter.ToByteArray());
+                            }
                             m_boxedValues.Add(boxedValue);
-                            m_boxedValueData.Add(WriteBoxedValueRef(value));
                         }
 
-                        Write(index);
-                        Write((ulong)0);
-                        Write((uint)0);
+                        writer.Write(index);
+                        writer.Write((ulong)0);
+                        writer.Write((uint)0);
                     }
                     break;
 
@@ -1952,19 +1974,12 @@ namespace FrostySdk.IO
 
         private int AddClass(string name, int fieldIndex, byte fieldCount, byte alignment, ushort type, ushort size, ushort secondSize, Type classType)
         {
-            //classTypes.Add(new EbxClass()
-            //{
-            //    Name = name,
-            //    FieldIndex = fieldIndex,
-            //    FieldCount = fieldCount,
-            //    Alignment = alignment,
-            //    Type = type,
-            //    Size = size,
-            //    SecondSize = secondSize
-            //});
             EbxClass ebxClass = GetClass(classType);
             classTypes.Add(ebxClass);
-            classGuids.Add(EbxReaderV2.std.GetGuid(ebxClass).Value);
+
+            Guid classGuid = ebxClass.SecondSize == 1 ? EbxReaderV2.patchStd.GetGuid(ebxClass).Value : EbxReaderV2.std.GetGuid(ebxClass).Value;
+
+            classGuids.Add(classGuid);
 
             //for (int i = 0; i < ebxClass.FieldCount; i++)
             //{
@@ -2032,16 +2047,30 @@ namespace FrostySdk.IO
             EbxClass? classType = null;
             foreach (TypeInfoGuidAttribute attr in objType.GetCustomAttributes<TypeInfoGuidAttribute>())
             {
-                if (classType == null)
-                    classType = EbxReaderV2.std.GetClass(attr.Guid);
-                //break;
+                classType = EbxReaderV2.patchStd.GetClass(attr.Guid);
+
+                if (classType.HasValue) return classType.Value;
             }
 
+            foreach (TypeInfoGuidAttribute attr in objType.GetCustomAttributes<TypeInfoGuidAttribute>())
+            {
+                classType = EbxReaderV2.std.GetClass(attr.Guid);
+
+                if (classType.HasValue) break;
+            }
             return classType.Value;
         }
 
-        internal EbxClass GetClass(Guid guid) => EbxReaderV2.std.GetClass(guid).Value;
+        internal EbxClass GetClass(Guid guid)
+        {
+            EbxClass? ebxClass = EbxReaderV2.patchStd.GetClass(guid);
 
-        internal EbxField GetField(EbxClass classType, int index) => EbxReaderV2.std.GetField(index).Value;
+            if (!ebxClass.HasValue)
+                ebxClass = EbxReaderV2.std.GetClass(guid);
+
+            return ebxClass.Value;
+        }
+
+        internal EbxField GetField(EbxClass classType, int index) => classType.SecondSize == 1 ? EbxReaderV2.patchStd.GetField(index).Value : EbxReaderV2.std.GetField(index).Value;
     }
 }

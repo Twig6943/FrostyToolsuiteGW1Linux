@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using Frosty.Controls;
 using Frosty.Core;
@@ -15,12 +16,12 @@ using FrostySdk.Resources;
 namespace CustomizationCreatorPlugin.Windows
 {
     /// <summary>
-    /// Interaction logic for AddWeaponWindow.xaml
+    /// Interaction logic for AddCustomizationWindow.xaml
     /// </summary>
     public partial class AddCustomizationWindow : FrostyDockableWindow
     {
         private string mBlueprintDirectory = "";
-        private string mWeaponName = "";
+        private string mCustomizationName = "";
 
         public AddCustomizationWindow()
         {
@@ -35,7 +36,7 @@ namespace CustomizationCreatorPlugin.Windows
 
         private void varWepNameTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            mWeaponName = varWepNameTextBox.Text;
+            mCustomizationName = varWepNameTextBox.Text;
         }
 
         private string VerifyFileName(string inFilename)
@@ -56,13 +57,34 @@ namespace CustomizationCreatorPlugin.Windows
 
         private void createButton_Click(object sender, RoutedEventArgs e)
         {
-            EbxAssetEntry entry = App.AssetManager.GetEbxEntry("Win32/weapons/ai_allstarjump_bpb");
+            EbxAssetEntry entry = App.AssetManager.GetEbxEntry("");
+
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesBattleforNeighborville))
+            {
+                entry  = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Body/Default/browncoat_body_default_visualasset_bpb");
+            }
+            else if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesGardenWarfare2))
+            {
+                entry = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Costume/browncoat_costume_default_unlockasset_bpb");
+            }
 
             string baseName = entry.Name.Substring(0, entry.Name.LastIndexOf('/') + 1);
-            uint wepHash = (uint)Utils.HashString(mWeaponName + DateTime.Now.ToFileTime());
-            string newName = $"{baseName}{wepHash}/{mWeaponName}_bpb";
+            uint customizationHash = (uint)Utils.HashString(mCustomizationName + DateTime.Now.ToFileTime());
+            
+            //string newName = $"{baseName}{customizationHash}/{mCustomizationName}_visualasset_bpb";
+            string newName = $"";
+
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesBattleforNeighborville))
+            {
+                newName = $"{baseName}{customizationHash}/{mCustomizationName}_visualasset_bpb";
+            }
+            else if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesGardenWarfare2))
+            {
+                newName = $"{baseName}{customizationHash}/{mCustomizationName}_unlockasset_bpb";
+            }
+
             VerifyFileName(newName);
-            EbxAssetEntry newBpb = CreateAsset(newName, TypeLibrary.GetType("PVZCharacterWeaponBlueprintBundle"));
+            EbxAssetEntry newBpb = CreateAsset(newName, TypeLibrary.GetType("BlueprintBundle"));
             newName = newName.ToLowerInvariant().Replace("win32/", string.Empty);
 
             // Create the new bundle
@@ -73,82 +95,83 @@ namespace CustomizationCreatorPlugin.Windows
             newBpb.AddedBundles.Add(bundleId);
 
             dynamic bpbRoot = App.AssetManager.GetEbx(entry).RootObject;
-            // Get the AntStateAsset to dupe
-            EbxAssetEntry antStateAsset = App.AssetManager.GetEbxEntry(bpbRoot.AntStateAssets[0].External.FileGuid);
 
-            // Get the original AntStateAsset and streaming chunk
-            dynamic antStateRoot = App.AssetManager.GetEbx(antStateAsset).RootObject;
-            Guid streamingGuid = antStateRoot.StreamingGuid;
+            /*// Get the ObjectBlueprint to dupe
+            EbxAssetEntry objectBP = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Body/Default/BrownCoat_Body_Default");
 
-            // Dupe the AntStateAsset
-            string weaponName = newName.Split('/').Last().Replace("_bpb", string.Empty);
-            string antStateName = $"animations/antanimations/gameplay/weapons/{wepHash}/{weaponName}/{weaponName}__3p_win32_antstate";
+            // Dupe the ObjectBlueprint
+            string objectBPName = $"Characters/Zombie/Horde/BrownCoat/Body/Default/{mCustomizationName}";
 
-            EbxAssetEntry newAntState = CreateAsset(antStateName, TypeLibrary.GetType("AntStateAsset"));
-            newAntState.AddedBundles.Clear();
-            newAntState.AddedBundles.Add(bundleId);
-            dynamic newAntRoot = App.AssetManager.GetEbx(newAntState).RootObject;
+            EbxAssetEntry newObjectBP = CreateAsset(objectBPName, TypeLibrary.GetType("ObjectBlueprint"));
+            newObjectBP.AddedBundles.Clear();
+            newObjectBP.AddedBundles.Add(bundleId);
+            dynamic newObjectBPRoot = App.AssetManager.GetEbx(newObjectBP).RootObject;*/
 
-            // Dupe the streaming chunk
-            // This is always an empty assetbank, but it's required
-            bool needsStreamingChunk = antStateRoot.ChunkSize > 0;
-            if (needsStreamingChunk)
+            string customizationBPAssetName = $"{mBlueprintDirectory}/{mCustomizationName}";
+            
+            //Type customizationBPType = TypeLibrary.GetType("VisualCustomizationAsset");
+            Type customizationBPType = TypeLibrary.GetType("");
+
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesBattleforNeighborville))
             {
-                ChunkAssetEntry chunk = App.AssetManager.GetChunkEntry(streamingGuid);
-                ChunkAssetEntry newChunk = DuplicateChunk(chunk);
-
-                newChunk.AddedBundles.Clear();
-                newChunk.AddedBundles.Add(bundleId);
-
-                // Set the chunk data to the duped chunk data
-                newAntRoot.StreamingGuid = newChunk.Id;
-                newAntRoot.ChunkSize = (int)App.AssetManager.GetChunk(newChunk).Length;
-                App.AssetManager.ModifyEbx(newAntState.Name, App.AssetManager.GetEbx(newAntState));
+                customizationBPType = TypeLibrary.GetType("VisualCustomizationAsset");
+            }
+            else if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesGardenWarfare2))
+            {
+                customizationBPType = TypeLibrary.GetType("PVZVisualUnlockAsset");
             }
 
-            //App.Logger.Log("Successfully created new weapon blueprint bundle {0}. \nAfter creating the weapon blueprint for this bundle, open {1} and assign it to Blueprint.", bundleName, newBpb.DisplayName);
-            string weaponBPAssetName = $"{mBlueprintDirectory}/{mWeaponName}";
-            Type weaponBPType = TypeLibrary.GetType("PVZCharacterWeaponBlueprint");
-
-            EbxAssetEntry newWeaponBP = CreateAsset(weaponBPAssetName, weaponBPType);
-            newWeaponBP.AddToBundle(bundleId);
+            EbxAssetEntry newCustomizationBP = CreateAsset(customizationBPAssetName, customizationBPType);
+            newCustomizationBP.AddToBundle(bundleId);
 
             // Update the new BPB
             EbxAsset newBpbAsset = App.AssetManager.GetEbx(newBpb);
             dynamic newBpbRoot = newBpbAsset.RootObject;
 
-            PointerRef newAntPr = new PointerRef(new EbxImportReference
-            {
-                ClassGuid = App.AssetManager.GetEbx(newAntState).RootInstanceGuid,
-                FileGuid = newAntState.Guid
-            });
+            // TODO: Create a new instance of DataContainerCollectionBlueprint
+            //dynamic funny = TypeLibrary.CreateObject("DataContainerCollectionBlueprint");
+            //newBpbRoot.Blueprint = funny; 
 
-            PointerRef newWepBPPr = new PointerRef(new EbxImportReference
-            {
-                ClassGuid = App.AssetManager.GetEbx(newWeaponBP).RootInstanceGuid,
-                FileGuid = newWeaponBP.Guid
-            });
+            // Temporary
+            //newBpbRoot.Blueprint = bpbRoot.Blueprint;
 
-            newBpbRoot.Blueprint = newWepBPPr;
-            newBpbRoot.AntStateAssets.Add(newAntPr);
-            newBpbAsset.AddDependency(newWeaponBP.Guid);
-            newBpbAsset.AddDependency(newAntState.Guid);
+            newBpbAsset.AddDependency(newCustomizationBP.Guid);
             App.AssetManager.ModifyEbx(newBpb.Name, newBpbAsset);
 
-            // Create the UnlockAsset
-            EbxAssetEntry baseUnlock = App.AssetManager.GetEbxEntry("Gameplay/Weapons/AI/Zombie/AllStar/AI_AllStarJump/U_AI_AllStarJump");
-            EbxAssetEntry newUnlock = DuplicateAsset(baseUnlock, $"{mBlueprintDirectory}/U_{mWeaponName}", false);
+            // Create the VisualAsset
+            //EbxAssetEntry baseVisual = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Body/Default/BrownCoat_Body_Default_VisualAsset");
+            EbxAssetEntry baseVisual = App.AssetManager.GetEbxEntry("");
 
-            EbxAsset newUnlockAsset = App.AssetManager.GetEbx(newUnlock);
-            dynamic newUnlockRoot = newUnlockAsset.RootObject;
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesBattleforNeighborville))
+            {
+                baseVisual = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Body/Default/BrownCoat_Body_Default_VisualAsset");
+            }
+            else if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesGardenWarfare2))
+            {
+                baseVisual = App.AssetManager.GetEbxEntry("Characters/Zombie/Horde/BrownCoat/Costume/BrownCoat_Costume_Default_UnlockAsset");
+            }
 
-            //newUnlockRoot.Identifier = (uint)Utils.HashString($"{newUnlock.Name}{newUnlock.Guid}", true);
-            //newUnlockRoot.WeaponIdentifier = (uint)Utils.HashString(newWeaponBP.Name);
-            newUnlockRoot.WeaponBlueprintBundleReference.Name = bundleName.Replace("win32/", string.Empty);
-            //newUnlockRoot.DebugUnlockId = newUnlock.Name.Split('/').Last();
-            App.AssetManager.ModifyEbx(newUnlock.Name, newUnlockAsset);
+            EbxAssetEntry newVisual = DuplicateAsset(baseVisual, $"{mBlueprintDirectory}/{mCustomizationName}", false);
 
-            App.Logger.Log("Successfully created the weapon {0} and bundle {1}.", newWeaponBP.Name, bundleName);
+            EbxAsset newVisualAsset = App.AssetManager.GetEbx(newVisual);
+            dynamic newVisualAssetRoot = newVisualAsset.RootObject;
+
+            //newVisualAssetRoot.BlueprintBundleReference.Name = bundleName.Replace("win32/", string.Empty);
+            //App.AssetManager.ModifyEbx(newVisual.Name, newVisualAsset);
+
+            if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesBattleforNeighborville))
+            {
+                newVisualAssetRoot.BlueprintBundleReference.Name = bundleName.Replace("win32/", string.Empty);
+            }
+            else if (ProfilesLibrary.IsLoaded(ProfileVersion.PlantsVsZombiesGardenWarfare2))
+            {
+                newVisualAssetRoot.Identifier = (uint)Utils.HashString($"{newVisual.Name}{newVisual.Guid}", true);
+                newVisualAssetRoot.DebugUnlockId = newVisual.Name.Split('/').Last();
+                newVisualAssetRoot.BlueprintBundleReference.Name = bundleName.Replace("win32/", string.Empty);
+            }
+            App.AssetManager.ModifyEbx(newVisual.Name, newVisualAsset);
+
+            App.Logger.Log("Successfully created the customization {0} and bundle {1}.", newCustomizationBP.Name, bundleName);
             Close();
         }
 
